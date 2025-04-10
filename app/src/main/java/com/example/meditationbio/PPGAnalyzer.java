@@ -2,16 +2,31 @@ package com.example.meditationbio;
 
 import android.graphics.ImageFormat;
 import android.media.Image;
+import android.os.SystemClock;
 import android.util.Log;
 
+import androidx.camera.core.ExperimentalGetImage;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageProxy;
 
 import java.nio.ByteBuffer;
+import java.util.LinkedList;
+import java.util.Queue;
 
+@ExperimentalGetImage
 public class PPGAnalyzer implements ImageAnalysis.Analyzer {
 
-    @androidx.camera.core.ExperimentalGetImage
+    private static final int MAX_BUFFER_SIZE = 300; // ~10 секунд при 30 FPS
+    private static final int SMOOTHING_WINDOW = 7;
+    private final Queue<Double> brightnessValues = new LinkedList<>();
+    private final Queue<Integer> bpmBuffer = new LinkedList<>();
+    private final BPMListener bpmListener;
+    private long lastBeatTime = 0;
+
+    public PPGAnalyzer(BPMListener bpmListener) {
+        this.bpmListener = bpmListener;
+    }
+
     @Override
     public void analyze(ImageProxy image) {
         Image img = image.getImage();
@@ -26,9 +41,69 @@ public class PPGAnalyzer implements ImageAnalysis.Analyzer {
             }
 
             double average = sum / (double) data.length;
-            Log.d("PPG", "Середня яскравість: " + average);
+
+            brightnessValues.add(average);
+            if (brightnessValues.size() > MAX_BUFFER_SIZE) {
+                brightnessValues.poll();
+            }
+
+            detectPulse();
         }
 
         image.close();
     }
+
+    private void detectPulse() {
+        if (brightnessValues.size() < SMOOTHING_WINDOW + 2) return;
+
+        // Згладжування
+        Double[] raw = brightnessValues.toArray(new Double[0]);
+        double[] smooth = new double[raw.length];
+        for (int i = 0; i < raw.length; i++) {
+            int start = Math.max(0, i - SMOOTHING_WINDOW);
+            int end = Math.min(raw.length - 1, i + SMOOTHING_WINDOW);
+            double sum = 0;
+            for (int j = start; j <= end; j++) {
+                sum += raw[j];
+            }
+            smooth[i] = sum / (end - start + 1);
+        }
+
+        // Пошук піків
+        int peaks = 0;
+        for (int i = 1; i < smooth.length - 1; i++) {
+            if (smooth[i] > smooth[i - 1] && smooth[i] > smooth[i + 1]) {
+                peaks++;
+            }
+        }
+
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastBeatTime > 10000) { // рахувати кожні 10 сек
+            lastBeatTime = now;
+            int bpm = (int) ((peaks * 60.0) / (MAX_BUFFER_SIZE / 30.0));
+
+            // фільтрація нереальних значень
+            if (bpm < 40 || bpm > 180) return;
+
+            // усереднення
+            bpmBuffer.add(bpm);
+            if (bpmBuffer.size() > 5) bpmBuffer.poll();
+
+            int averageBpm = 0;
+            for (int val : bpmBuffer) averageBpm += val;
+            averageBpm = averageBpm / bpmBuffer.size();
+
+            Log.d("PPG", "BPM: " + averageBpm);
+
+            if (bpmListener != null) {
+                bpmListener.onBpmDetected(averageBpm);
+            }
+        }
+    }
 }
+
+interface BPMListener {
+    void onBpmDetected(int bpm);
+}
+
+
