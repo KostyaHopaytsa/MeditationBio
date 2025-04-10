@@ -59,17 +59,14 @@ public class MainActivity extends AppCompatActivity {
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                 .build();
 
-                imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), image -> {
-                    // Тут буде обробка кадрів
-                    image.close(); // не забудь закривати!
-                });
+                imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), new PPGAnalyzer());
 
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
 
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(
+                Camera camera = cameraProvider.bindToLifecycle(
                         this, cameraSelector, preview, imageAnalysis);
-
+                camera.getCameraControl().enableTorch(true);
             } catch (ExecutionException | InterruptedException e) {
                 e.printStackTrace();
             }
