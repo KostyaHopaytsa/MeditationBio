@@ -2,6 +2,8 @@ package com.example.meditationbio;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
@@ -30,21 +32,39 @@ public class MainActivity extends AppCompatActivity {
 
     private PreviewView previewView;
     private TextView bpmText;
+    private TextView brpmText;
+
+    private BreathAnalyzer breathAnalyzer;
+    private SensorManager sensorManager;
+    private Sensor accelerometer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        bpmText = findViewById(R.id.bpmText);
-        previewView = findViewById(R.id.previewView);
+        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 
+        previewView = findViewById(R.id.previewView);
+        bpmText = findViewById(R.id.bpmText);
+        brpmText = findViewById(R.id.brpmText); // додай у layout
+
+        // Камера
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
             startCamera();
         } else {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 101);
         }
+
+        // Аналізатор дихання
+        breathAnalyzer = new BreathAnalyzer(brpm -> {
+            runOnUiThread(() -> {
+                Log.d("BREATH", "BRPM: " + brpm);
+                brpmText.setText("BRPM: " + brpm);
+            });
+        });
     }
 
     @OptIn(markerClass = ExperimentalGetImage.class)
@@ -68,17 +88,32 @@ public class MainActivity extends AppCompatActivity {
                 imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), new PPGAnalyzer(bpm -> {
                     runOnUiThread(() -> bpmText.setText("BPM: " + bpm));
                 }));
+
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
 
                 cameraProvider.unbindAll();
                 Camera camera = cameraProvider.bindToLifecycle(
                         this, cameraSelector, preview, imageAnalysis);
                 camera.getCameraControl().enableTorch(true);
+
             } catch (ExecutionException | InterruptedException e) {
                 e.printStackTrace();
             }
         }, ContextCompat.getMainExecutor(this));
     }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        sensorManager.registerListener(breathAnalyzer, accelerometer, SensorManager.SENSOR_DELAY_GAME);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        sensorManager.unregisterListener(breathAnalyzer);
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
