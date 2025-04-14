@@ -1,6 +1,7 @@
 package com.example.meditationbio;
 
 import android.Manifest;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
@@ -34,21 +35,18 @@ public class MainActivity extends AppCompatActivity {
     private TextView bpmText;
     private TextView brpmText;
 
-    private BreathAnalyzer breathAnalyzer;
     private SensorManager sensorManager;
     private Sensor accelerometer;
+    private BreathAnalyzer breathAnalyzer;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
-        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-
         previewView = findViewById(R.id.previewView);
         bpmText = findViewById(R.id.bpmText);
-        brpmText = findViewById(R.id.brpmText); // додай у layout
+        brpmText = findViewById(R.id.brpmText);
 
         // Камера
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -58,13 +56,22 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 101);
         }
 
-        // Аналізатор дихання
+        // Дихання — ініціалізація
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+
         breathAnalyzer = new BreathAnalyzer(brpm -> {
             runOnUiThread(() -> {
                 Log.d("BREATH", "BRPM: " + brpm);
                 brpmText.setText("BRPM: " + brpm);
             });
         });
+
+        if (accelerometer != null) {
+            sensorManager.registerListener(breathAnalyzer, accelerometer, SensorManager.SENSOR_DELAY_GAME);
+        } else {
+            Log.e("BREATH", "Акселерометр не знайдено");
+        }
     }
 
     @OptIn(markerClass = ExperimentalGetImage.class)
@@ -103,19 +110,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        sensorManager.registerListener(breathAnalyzer, accelerometer, SensorManager.SENSOR_DELAY_GAME);
+    protected void onDestroy() {
+        super.onDestroy();
+        if (sensorManager != null && breathAnalyzer != null) {
+            sensorManager.unregisterListener(breathAnalyzer);
+        }
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        sensorManager.unregisterListener(breathAnalyzer);
-    }
-
-    @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == 101 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startCamera();

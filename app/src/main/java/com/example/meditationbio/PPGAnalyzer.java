@@ -17,7 +17,6 @@ import java.util.Queue;
 public class PPGAnalyzer implements ImageAnalysis.Analyzer {
 
     private static final int MAX_BUFFER_SIZE = 600; // ~20 секунд при 30 FPS
-    private static final int SMOOTHING_WINDOW = 8;
     private static final int STABILIZATION_TIME_MS = 2500;
     private static final int BPM_MIN = 40;
     private static final int BPM_MAX = 150;
@@ -80,29 +79,51 @@ public class PPGAnalyzer implements ImageAnalysis.Analyzer {
 
     private void computeFinalBPM() {
         Double[] raw = brightnessValues.toArray(new Double[0]);
-        double[] smooth = new double[raw.length];
+        double[] signal = new double[raw.length];
 
-        // Просте ковзне середнє
-        for (int i = 0; i < raw.length; i++) {
-            int start = Math.max(0, i - SMOOTHING_WINDOW);
-            int end = Math.min(raw.length - 1, i + SMOOTHING_WINDOW);
-            double sum = 0;
-            for (int j = start; j <= end; j++) {
-                sum += raw[j];
-            }
-            smooth[i] = sum / (end - start + 1);
+        // 1. EMA згладжування
+        double alpha = 0.1;
+        signal[0] = raw[0];
+        for (int i = 1; i < raw.length; i++) {
+            signal[i] = alpha * raw[i] + (1 - alpha) * signal[i - 1];
         }
 
-        // Пошук піків
+        // 2. Нормалізація
+        double mean = 0;
+        for (double v : signal) mean += v;
+        mean /= signal.length;
+        for (int i = 0; i < signal.length; i++) {
+            signal[i] -= mean;
+        }
+
+        // 3. Bandpass-фільтрація (грубе виділення коливань)
+        double[] bandpassed = new double[signal.length];
+        for (int i = 1; i < signal.length - 1; i++) {
+            bandpassed[i] = signal[i] - 0.5 * (signal[i - 1] + signal[i + 1]);
+        }
+
+        // 4. Пошук піків
         int peaks = 0;
-        for (int i = 1; i < smooth.length - 1; i++) {
-            if (smooth[i] > smooth[i - 1] && smooth[i] > smooth[i + 1]) {
+        int minPeakDistance = 6; // зменшено з 10 для більшої чутливості
+        double threshold = calculateDynamicThreshold(bandpassed, 0.8); // зменшено з 1.2
+
+        for (int i = minPeakDistance; i < bandpassed.length - minPeakDistance; i++) {
+            boolean isPeak = bandpassed[i] > threshold;
+            for (int j = 1; j <= minPeakDistance; j++) {
+                if (bandpassed[i] <= bandpassed[i - j] || bandpassed[i] <= bandpassed[i + j]) {
+                    isPeak = false;
+                    break;
+                }
+            }
+            if (isPeak) {
                 peaks++;
+                i += minPeakDistance;
             }
         }
 
-        // Розрахунок BPM
-        double bpm = (double) peaks * 60 / (MAX_BUFFER_SIZE / 30.0);
+        // 5. Розрахунок BPM
+        double durationSec = MAX_BUFFER_SIZE / 30.0;
+        double bpm = (double) peaks * 60 / durationSec;
 
         if (bpm < BPM_MIN || bpm > BPM_MAX) {
             Log.w("PPG", "BPM out of range: " + bpm);
@@ -111,13 +132,23 @@ public class PPGAnalyzer implements ImageAnalysis.Analyzer {
 
         int roundedBpm = (int) bpm;
         Log.d("PPG", "Final BPM: " + roundedBpm);
-
         if (bpmListener != null) {
             bpmListener.onBpmDetected(roundedBpm);
         }
     }
-}
 
+    private double calculateDynamicThreshold(double[] signal, double multiplier) {
+        double mean = 0;
+        for (double v : signal) mean += v;
+        mean /= signal.length;
+
+        double std = 0;
+        for (double v : signal) std += Math.pow(v - mean, 2);
+        std = Math.sqrt(std / signal.length);
+
+        return mean + std * multiplier;
+    }
+}
 interface BPMListener {
     void onBpmDetected(int bpm);
 }
