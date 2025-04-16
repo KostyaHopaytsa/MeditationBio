@@ -34,10 +34,13 @@ public class MainActivity extends AppCompatActivity {
     private PreviewView previewView;
     private TextView bpmText;
     private TextView brpmText;
+    private TextView stressText;
 
     private SensorManager sensorManager;
     private Sensor accelerometer;
     private BreathAnalyzer breathAnalyzer;
+
+    private static final int REQUEST_AUDIO_PERMISSION = 102;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,6 +50,7 @@ public class MainActivity extends AppCompatActivity {
         previewView = findViewById(R.id.previewView);
         bpmText = findViewById(R.id.bpmText);
         brpmText = findViewById(R.id.brpmText);
+        stressText = findViewById(R.id.stressText);
 
         // Камера
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -56,7 +60,7 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 101);
         }
 
-        // Дихання — ініціалізація
+        // Дихання
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 
@@ -64,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(() -> {
                 Log.d("BREATH", "BRPM: " + brpm);
                 brpmText.setText("BRPM: " + brpm);
+                startStressAnalyzer(); // Запускаємо після BRPM
             });
         });
 
@@ -71,6 +76,26 @@ public class MainActivity extends AppCompatActivity {
             sensorManager.registerListener(breathAnalyzer, accelerometer, SensorManager.SENSOR_DELAY_GAME);
         } else {
             Log.e("BREATH", "Акселерометр не знайдено");
+        }
+    }
+
+    private void startStressAnalyzer() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED) {
+
+            StressAnalyzer stressAnalyzer = new StressAnalyzer(level -> {
+                runOnUiThread(() -> {
+                    Log.d("STRESS", "Detected stress level: " + level);
+                    Toast.makeText(this, "Stress level: " + level, Toast.LENGTH_LONG).show();
+                    stressText.setText("STRESS: " + level);
+                });
+            });
+
+            stressAnalyzer.startRecording();
+
+        } else {
+            ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_AUDIO_PERMISSION);
         }
     }
 
@@ -123,8 +148,10 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == 101 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startCamera();
+        } else if (requestCode == REQUEST_AUDIO_PERMISSION && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startStressAnalyzer();
         } else {
-            Toast.makeText(this, "Camera permission is required", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Permission required", Toast.LENGTH_SHORT).show();
         }
     }
 }
