@@ -8,6 +8,8 @@ import android.hardware.SensorManager;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
+import android.view.View;
+import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -32,15 +34,19 @@ import java.util.concurrent.Executors;
 public class MainActivity extends AppCompatActivity {
 
     private PreviewView previewView;
-    private TextView bpmText;
-    private TextView brpmText;
-    private TextView stressText;
+    private TextView bpmText, brpmText, stressText;
+    private Button startButton, repeatBpmButton, nextToBrpmButton, repeatBrpmButton, nextToStressButton;
 
     private SensorManager sensorManager;
     private Sensor accelerometer;
-    private BreathAnalyzer breathAnalyzer;
-
     private static final int REQUEST_AUDIO_PERMISSION = 102;
+
+    private boolean bpmMeasured = false;
+    private boolean brpmMeasured = false;
+
+    private ProcessCameraProvider cameraProvider;
+    private ImageAnalysis imageAnalysis;
+    private Camera camera; // 👈 для керування спалахом
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -52,30 +58,112 @@ public class MainActivity extends AppCompatActivity {
         brpmText = findViewById(R.id.brpmText);
         stressText = findViewById(R.id.stressText);
 
-        // Камера
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-                == PackageManager.PERMISSION_GRANTED) {
-            startCamera();
-        } else {
-            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, 101);
-        }
+        startButton = findViewById(R.id.startButton);
+        repeatBpmButton = findViewById(R.id.repeatBpmButton);
+        nextToBrpmButton = findViewById(R.id.nextToBrpmButton);
+        repeatBrpmButton = findViewById(R.id.repeatBrpmButton);
+        nextToStressButton = findViewById(R.id.nextToStressButton);
 
-        // Дихання
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
 
-        breathAnalyzer = new BreathAnalyzer(brpm -> {
+        startButton.setOnClickListener(v -> startBpmAnalysis());
+
+        repeatBpmButton.setOnClickListener(v -> startBpmAnalysis());
+        nextToBrpmButton.setOnClickListener(v -> {
+            repeatBpmButton.setVisibility(View.GONE);
+            nextToBrpmButton.setVisibility(View.GONE);
+            startBrpmAnalysis();
+        });
+
+        repeatBrpmButton.setOnClickListener(v -> startBrpmAnalysis());
+        nextToStressButton.setOnClickListener(v -> {
+            repeatBrpmButton.setVisibility(View.GONE);
+            nextToStressButton.setVisibility(View.GONE);
+            startStressAnalyzer();
+        });
+
+        initCameraProvider(); // Просто ініціалізуємо, не запускаємо
+    }
+
+    private void initCameraProvider() {
+        ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
+        future.addListener(() -> {
+            try {
+                cameraProvider = future.get();
+            } catch (ExecutionException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        }, ContextCompat.getMainExecutor(this));
+    }
+
+    @OptIn(markerClass = ExperimentalGetImage.class)
+    private void startBpmAnalysis() {
+        bpmText.setText("BPM: ...");
+        bpmMeasured = false;
+
+        if (cameraProvider == null) {
+            Toast.makeText(this, "Камеру не ініціалізовано", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        imageAnalysis = new ImageAnalysis.Builder()
+                .setTargetResolution(new Size(640, 480))
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build();
+
+        imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), new PPGAnalyzer(bpm -> {
             runOnUiThread(() -> {
-                Log.d("BREATH", "BRPM: " + brpm);
+                bpmText.setText("BPM: " + bpm);
+                bpmMeasured = true;
+                stopCamera(); // Вимикаємо камеру і спалах після виміру
+                repeatBpmButton.setVisibility(View.VISIBLE);
+                nextToBrpmButton.setVisibility(View.VISIBLE);
+            });
+        }));
+
+        Preview preview = new Preview.Builder().build();
+        preview.setSurfaceProvider(previewView.getSurfaceProvider());
+
+        CameraSelector selector = CameraSelector.DEFAULT_BACK_CAMERA;
+
+        cameraProvider.unbindAll();
+        camera = cameraProvider.bindToLifecycle(this, selector, preview, imageAnalysis);
+
+        // 🔦 Увімкнути спалах
+        if (camera != null) {
+            camera.getCameraControl().enableTorch(true);
+        }
+    }
+
+    private void stopCamera() {
+        if (cameraProvider != null) {
+            cameraProvider.unbindAll();
+        }
+
+        // 🔦 Вимкнути спалах
+        if (camera != null) {
+            camera.getCameraControl().enableTorch(false);
+            camera = null;
+        }
+    }
+
+    private void startBrpmAnalysis() {
+        brpmText.setText("BRPM: ...");
+        brpmMeasured = false;
+
+        BreathAnalyzer analyzer = new BreathAnalyzer(brpm -> {
+            runOnUiThread(() -> {
                 brpmText.setText("BRPM: " + brpm);
-                startStressAnalyzer(); // Запускаємо після BRPM
+                repeatBrpmButton.setVisibility(View.VISIBLE);
+                nextToStressButton.setVisibility(View.VISIBLE);
             });
         });
 
         if (accelerometer != null) {
-            sensorManager.registerListener(breathAnalyzer, accelerometer, SensorManager.SENSOR_DELAY_GAME);
+            sensorManager.registerListener(analyzer, accelerometer, SensorManager.SENSOR_DELAY_GAME);
         } else {
-            Log.e("BREATH", "Акселерометр не знайдено");
+            Toast.makeText(this, "Акселерометр не знайдено", Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -83,11 +171,12 @@ public class MainActivity extends AppCompatActivity {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED) {
 
+            stressText.setText("STRESS: ...");
+
             StressAnalyzer stressAnalyzer = new StressAnalyzer(level -> {
                 runOnUiThread(() -> {
-                    Log.d("STRESS", "Detected stress level: " + level);
-                    Toast.makeText(this, "Stress level: " + level, Toast.LENGTH_LONG).show();
                     stressText.setText("STRESS: " + level);
+                    Toast.makeText(this, "Stress level: " + level, Toast.LENGTH_LONG).show();
                 });
             });
 
@@ -99,59 +188,20 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @OptIn(markerClass = ExperimentalGetImage.class)
-    private void startCamera() {
-        ListenableFuture<ProcessCameraProvider> cameraProviderFuture =
-                ProcessCameraProvider.getInstance(this);
-
-        cameraProviderFuture.addListener(() -> {
-            try {
-                ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-
-                Preview preview = new Preview.Builder().build();
-                preview.setSurfaceProvider(previewView.getSurfaceProvider());
-
-                ImageAnalysis imageAnalysis =
-                        new ImageAnalysis.Builder()
-                                .setTargetResolution(new Size(640, 480))
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build();
-
-                imageAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), new PPGAnalyzer(bpm -> {
-                    runOnUiThread(() -> bpmText.setText("BPM: " + bpm));
-                }));
-
-                CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
-
-                cameraProvider.unbindAll();
-                Camera camera = cameraProvider.bindToLifecycle(
-                        this, cameraSelector, preview, imageAnalysis);
-                camera.getCameraControl().enableTorch(true);
-
-            } catch (ExecutionException | InterruptedException e) {
-                e.printStackTrace();
-            }
-        }, ContextCompat.getMainExecutor(this));
-    }
-
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (sensorManager != null && breathAnalyzer != null) {
-            sensorManager.unregisterListener(breathAnalyzer);
-        }
+        stopCamera();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
                                            @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == 101 && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startCamera();
-        } else if (requestCode == REQUEST_AUDIO_PERMISSION && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (requestCode == REQUEST_AUDIO_PERMISSION &&
+                grantResults.length > 0 &&
+                grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             startStressAnalyzer();
-        } else {
-            Toast.makeText(this, "Permission required", Toast.LENGTH_SHORT).show();
         }
     }
 }
