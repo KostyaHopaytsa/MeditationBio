@@ -8,23 +8,26 @@ import android.util.Log;
 
 public class StressAnalyzer {
 
-    private static final int SAMPLE_RATE = 16000; // 16 kHz — для голосу
-    private static final int RECORD_DURATION_MS = 5000; // 5 сек
+    private static final int SAMPLE_RATE = 16000;
     private static final int CHANNEL_CONFIG = AudioFormat.CHANNEL_IN_MONO;
     private static final int AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
 
     private final StressListener listener;
     private final Handler handler = new Handler();
 
+    private AudioRecord recorder;
+    private short[] buffer;
+    private boolean isRecording = false;
+    private int bufferSize;
+    private int currentIndex = 0;
+
     public StressAnalyzer(StressListener listener) {
         this.listener = listener;
+        this.bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT);
+        this.buffer = new short[bufferSize * 5]; // до 5 сек
     }
 
-    public void startRecording() {
-        int bufferSize = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CONFIG, AUDIO_FORMAT);
-
-        AudioRecord recorder = null;
-
+    public void beginRecording() {
         try {
             recorder = new AudioRecord(
                     MediaRecorder.AudioSource.MIC,
@@ -39,32 +42,40 @@ public class StressAnalyzer {
                 return;
             }
 
-            short[] audioBuffer = new short[bufferSize * RECORD_DURATION_MS / 1000];
-
+            isRecording = true;
+            currentIndex = 0;
             recorder.startRecording();
-            Log.d("STRESS", "Recording started");
+            Log.d("STRESS", "Recording started (hold button)");
 
-            final AudioRecord finalRecorder = recorder;
             new Thread(() -> {
-                try {
-                    int read = finalRecorder.read(audioBuffer, 0, audioBuffer.length);
-                    finalRecorder.stop();
-                    finalRecorder.release();
-
-                    Log.d("STRESS", "Recording finished: " + read + " samples");
-
-                    analyze(audioBuffer, read);
-                } catch (SecurityException e) {
-                    Log.e("STRESS", "Permission denied while reading audio: " + e.getMessage());
+                while (isRecording && currentIndex < buffer.length) {
+                    int read = recorder.read(buffer, currentIndex, buffer.length - currentIndex);
+                    if (read > 0) {
+                        currentIndex += read;
+                    }
                 }
             }).start();
 
         } catch (SecurityException e) {
-            Log.e("STRESS", "AudioRecord initialization failed: " + e.getMessage());
-            if (recorder != null) {
-                recorder.release();
-            }
+            Log.e("STRESS", "Permission error: " + e.getMessage());
+            if (recorder != null) recorder.release();
         }
+    }
+
+    public void endAndAnalyze() {
+        if (!isRecording || recorder == null) return;
+
+        isRecording = false;
+        try {
+            recorder.stop();
+        } catch (IllegalStateException e) {
+            Log.e("STRESS", "Recorder stop failed: " + e.getMessage());
+        }
+        recorder.release();
+        recorder = null;
+
+        Log.d("STRESS", "Recording finished. Samples: " + currentIndex);
+        analyze(buffer, currentIndex);
     }
 
     private void analyze(short[] buffer, int length) {
@@ -82,7 +93,6 @@ public class StressAnalyzer {
 
         double rms = Math.sqrt(sumSq / length);
 
-        // Стандартне відхилення амплітуди
         double mean = sumSq / length;
         double std = 0;
         for (double val : norm) std += Math.pow(val * val - mean, 2);
@@ -90,7 +100,6 @@ public class StressAnalyzer {
 
         Log.d("STRESS", "RMS: " + rms + ", MaxAmp: " + maxAmp + ", StdDev: " + std);
 
-        // Оцінка рівня стресу
         String level;
         if (rms < 0.02 && std < 0.01) {
             level = "Low";
@@ -105,7 +114,6 @@ public class StressAnalyzer {
         }
     }
 }
-
 interface StressListener {
     void onStressLevelDetected(String level); // "Low", "Medium", "High"
 }

@@ -107,4 +107,20 @@
         app:layout_constraintStart_toStartOf="parent"
         android:layout_marginStart="16dp" />
 
+    <!-- Кнопка для запису голосу -->
+    <Button
+        android:id="@+id/recordButton"
+        android:layout_width="200dp"
+        android:layout_height="wrap_content"
+        android:text="🎤 Утримуй для запису"
+        android:visibility="gone"
+        android:backgroundTint="@android:color/holo_red_dark"
+        android:textColor="@android:color/white"
+        android:padding="16dp"
+        android:textSize="18sp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>
