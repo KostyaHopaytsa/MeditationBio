@@ -248,12 +248,16 @@ public class MainActivity extends AppCompatActivity {
             String overallState = determineOverallState(bpmValue, brpmValue, stressLevel);
             Toast.makeText(this, "Загальний стан: " + overallState, Toast.LENGTH_LONG).show();
 
-            // Зберегти в базу
-            Measurement measurement = new Measurement(bpmValue, brpmValue, stressLevel, System.currentTimeMillis());
-            AppDatabase db = AppDatabase.getInstance(getApplicationContext());
-            Executors.newSingleThreadExecutor().execute(() -> db.measurementDao().insert(measurement));
+            // Створюємо об'єкт вимірювання з усіма параметрами
+            Measurement measurement = new Measurement(bpmValue, brpmValue, stressLevel, overallState, System.currentTimeMillis());
 
-            // Отримати трек
+            // Зберігаємо в базу через вже ініціалізовану змінну db
+            Executors.newSingleThreadExecutor().execute(() -> {
+                db.measurementDao().insert(measurement);
+                Log.d("ROOM", "Saved to DB: " + bpmValue + " " + brpmValue + " " + stressLevel + " " + overallState);
+            });
+
+            // Підбираємо трек
             String tag = mapStateToJamendoTag(overallState);
             fetchTrackFromJamendo(tag);
         }
