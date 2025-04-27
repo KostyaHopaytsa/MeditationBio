@@ -1,7 +1,9 @@
 package com.example.meditationbio;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
@@ -72,6 +74,7 @@ public class MainActivity extends AppCompatActivity {
 
     private JamendoID JamendoID;
 
+    @SuppressLint("ClickableViewAccessibility")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -126,6 +129,12 @@ public class MainActivity extends AppCompatActivity {
         });
 
         initCameraProvider();
+
+        Button historyButton = findViewById(R.id.historyButton);
+
+        historyButton.setOnClickListener(v -> {
+            startActivity(new Intent(MainActivity.this, HistoryActivity.class));
+        });
     }
 
     private void initCameraProvider() {

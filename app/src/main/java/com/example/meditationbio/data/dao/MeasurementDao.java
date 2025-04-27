@@ -3,6 +3,7 @@ package com.example.meditationbio.data.dao;
 import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.Query;
+import androidx.lifecycle.LiveData;
 
 import com.example.meditationbio.data.model.Measurement;
 
@@ -14,5 +15,5 @@ public interface MeasurementDao {
     void insert(Measurement measurement);
 
     @Query("SELECT * FROM Measurement ORDER BY timestamp DESC")
-    List<Measurement> getAllMeasurements();
+    LiveData<List<Measurement>> getAllMeasurements();
 }
