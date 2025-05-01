@@ -88,6 +88,7 @@ public class BreathAnalyzer implements SensorEventListener {
 
         if (brpm < BREATH_MIN || brpm > BREATH_MAX) {
             Log.w("BREATH", "BRPM out of range: " + brpm);
+            if (listener != null) listener.onBreathRateInvalid();
             return;
         }
 
@@ -106,4 +107,5 @@ public class BreathAnalyzer implements SensorEventListener {
 
 interface BreathListener {
     void onBreathRateDetected(int brpm);
+    void onBreathRateInvalid();
 }

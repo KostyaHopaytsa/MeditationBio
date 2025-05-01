@@ -127,6 +127,7 @@ public class PPGAnalyzer implements ImageAnalysis.Analyzer {
 
         if (bpm < BPM_MIN || bpm > BPM_MAX) {
             Log.w("PPG", "BPM out of range: " + bpm);
+            if (bpmListener != null) bpmListener.onBpmInvalid();
             return;
         }
 
@@ -151,4 +152,5 @@ public class PPGAnalyzer implements ImageAnalysis.Analyzer {
 }
 interface BPMListener {
     void onBpmDetected(int bpm);
+    void onBpmInvalid();
 }
