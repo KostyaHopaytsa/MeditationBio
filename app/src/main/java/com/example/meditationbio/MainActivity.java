@@ -169,6 +169,7 @@ public class MainActivity extends AppCompatActivity {
         bpmText.setText("BPM: ...");
         bpmMeasured = false;
         updateUIState(5);
+        previewView.setVisibility(View.VISIBLE);
 
         if (cameraProvider == null) {
             Toast.makeText(this, "Камеру не ініціалізовано", Toast.LENGTH_SHORT).show();
@@ -227,6 +228,7 @@ public class MainActivity extends AppCompatActivity {
             imageAnalysis.clearAnalyzer();
             imageAnalysis = null;
         }
+        previewView.setVisibility(View.INVISIBLE);
     }
 
     private void startBrpmAnalysis() {
@@ -272,6 +274,7 @@ public class MainActivity extends AppCompatActivity {
                 runOnUiThread(() -> {
                     stressText.setText("STRESS: " + level);
                     stressLevel = level;
+                    checkAndProcessFinalState();
                     Toast.makeText(this, "Stress level: " + level, Toast.LENGTH_LONG).show();
                     updateUIState(4); // Показати кнопки після STRESS
                 });
@@ -280,6 +283,19 @@ public class MainActivity extends AppCompatActivity {
         } else {
             ActivityCompat.requestPermissions(this,
                     new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_AUDIO_PERMISSION);
+        }
+    }
+
+    private void checkAndProcessFinalState() {
+        if (bpmValue != null && brpmValue != null && stressLevel != null) {
+            String overallState = determineOverallState(bpmValue, brpmValue, stressLevel);
+
+            Measurement measurement = new Measurement(bpmValue, brpmValue, stressLevel, overallState, System.currentTimeMillis());
+
+            Executors.newSingleThreadExecutor().execute(() -> {
+                db.measurementDao().insert(measurement);
+                Log.d("ROOM", "Saved to DB: " + bpmValue + " " + brpmValue + " " + stressLevel + " " + overallState);
+            });
         }
     }
 
