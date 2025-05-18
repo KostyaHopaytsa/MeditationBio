@@ -1,13 +1,10 @@
-package com.example.meditationbio.data.db;
+package com.example.meditationbio.dataDB;
 
 import android.content.Context;
 
 import androidx.room.Database;
 import androidx.room.Room;
 import androidx.room.RoomDatabase;
-
-import com.example.meditationbio.data.model.Measurement;
-import com.example.meditationbio.data.dao.MeasurementDao;
 
 @Database(entities = {Measurement.class}, version = 1)
 public abstract class AppDatabase extends RoomDatabase {

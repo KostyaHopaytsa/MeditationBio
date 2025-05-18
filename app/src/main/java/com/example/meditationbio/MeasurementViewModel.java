@@ -4,8 +4,8 @@ import android.app.Application;
 import androidx.annotation.NonNull;
 import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
-import com.example.meditationbio.data.db.AppDatabase;
-import com.example.meditationbio.data.model.Measurement;
+import com.example.meditationbio.dataDB.AppDatabase;
+import com.example.meditationbio.dataDB.Measurement;
 import java.util.List;
 
 public class MeasurementViewModel extends AndroidViewModel {

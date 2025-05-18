@@ -7,7 +7,6 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
-import android.net.Uri;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
@@ -30,9 +29,6 @@ import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
-import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.common.MediaItem;
-
 import com.example.meditationbio.jamendo.JamendoTrack;
 import com.example.meditationbio.jamendo.TrackSelectionActivity;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -50,8 +46,8 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 
-import com.example.meditationbio.data.db.AppDatabase;
-import com.example.meditationbio.data.model.Measurement;
+import com.example.meditationbio.dataDB.AppDatabase;
+import com.example.meditationbio.dataDB.Measurement;
 import com.google.gson.Gson;
 
 public class MainActivity extends AppCompatActivity {

@@ -1,11 +1,9 @@
-package com.example.meditationbio.data.dao;
+package com.example.meditationbio.dataDB;
 
 import androidx.room.Dao;
 import androidx.room.Insert;
 import androidx.room.Query;
 import androidx.lifecycle.LiveData;
-
-import com.example.meditationbio.data.model.Measurement;
 
 import java.util.List;
 

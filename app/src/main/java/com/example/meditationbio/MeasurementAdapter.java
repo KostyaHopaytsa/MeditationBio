@@ -6,7 +6,7 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
-import com.example.meditationbio.data.model.Measurement;
+import com.example.meditationbio.dataDB.Measurement;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
