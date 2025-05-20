@@ -50,6 +50,9 @@ import com.example.meditationbio.dataDB.AppDatabase;
 import com.example.meditationbio.dataDB.Measurement;
 import com.google.gson.Gson;
 
+import android.media.AudioManager;
+import android.media.ToneGenerator;
+
 public class MainActivity extends AppCompatActivity {
 
     private PreviewView previewView;
@@ -101,11 +104,12 @@ public class MainActivity extends AppCompatActivity {
 
         db = AppDatabase.getInstance(getApplicationContext());
 
-        startButton.setOnClickListener(v -> startBpmAnalysis());
+        startButton.setOnClickListener(v -> showBpmStartDialog());
         repeatBpmButton.setOnClickListener(v -> startBpmAnalysis());
-        nextToBrpmButton.setOnClickListener(v -> startBrpmAnalysis());
+        nextToBrpmButton.setOnClickListener(v -> showBrpmStartDialog());
         repeatBrpmButton.setOnClickListener(v -> startBrpmAnalysis());
-        nextToStressButton.setOnClickListener(v -> startStressAnalyzer());
+        nextToStressButton.setOnClickListener(v -> showStressStartDialog());
+        repeatStressButton.setOnClickListener(v -> startStressAnalyzer());
 
         recordButton.setOnTouchListener((v, event) -> {
             switch (event.getAction()) {
@@ -125,7 +129,6 @@ public class MainActivity extends AppCompatActivity {
             startActivity(new Intent(MainActivity.this, HistoryActivity.class));
         });
 
-        repeatStressButton.setOnClickListener(v -> startStressAnalyzer());
         nextToMusicButton.setOnClickListener(v -> {
             String overallState = determineOverallState(bpmValue, brpmValue, stressLevel);
             String tag = mapStateToJamendoTag(overallState);
@@ -159,7 +162,16 @@ public class MainActivity extends AppCompatActivity {
             }
         }, ContextCompat.getMainExecutor(this));
     }
-
+    private void showBpmStartDialog() {
+        new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this)
+                .setTitle("Початок вимірювання пульсу")
+                .setMessage("Покладіть палець так щоб він перекривав ліхтарик та камеру, " +
+                        "зображення з камери має бути червоним. вимір займе 15-20 секунд." +
+                        " Натисніть ОК, коли будете готові почати.")
+                .setPositiveButton("ОК", (dialog, which) -> startBpmAnalysis())
+                .setNegativeButton("Скасувати", null)
+                .show();
+    }
     @OptIn(markerClass = ExperimentalGetImage.class)
     private void startBpmAnalysis() {
         bpmText.setText("BPM: ...");
@@ -186,6 +198,8 @@ public class MainActivity extends AppCompatActivity {
                     bpmMeasured = true;
                     stopCamera();
                     updateUIState(1);
+                    ToneGenerator toneGen = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100);
+                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 300);
                 });
             }
 
@@ -196,6 +210,8 @@ public class MainActivity extends AppCompatActivity {
                     stopCamera();
                     Toast.makeText(MainActivity.this, "BPM не визначено. Спробуйте ще раз.", Toast.LENGTH_LONG).show();
                     repeatBpmButton.setVisibility(View.VISIBLE);
+                    ToneGenerator toneGen = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100);
+                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 300);
                 });
             }
         }));
@@ -226,7 +242,16 @@ public class MainActivity extends AppCompatActivity {
         }
         previewView.setVisibility(View.INVISIBLE);
     }
-
+    private void showBrpmStartDialog() {
+        new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this)
+                .setTitle("Початок вимірювання дихання")
+                .setMessage("Покладіть телефон на живіт та спокійно дихайте," +
+                        " коли вимір закінчиться буде сигнал. Час виміру 20 секунд. " +
+                        "Натисніть ОК, щоб розпочати вимірювання BRPM.")
+                .setPositiveButton("ОК", (dialog, which) -> startBrpmAnalysis())
+                .setNegativeButton("Скасувати", null)
+                .show();
+    }
     private void startBrpmAnalysis() {
         brpmText.setText("BRPM: ...");
         brpmMeasured = false;
@@ -239,6 +264,8 @@ public class MainActivity extends AppCompatActivity {
                     brpmText.setText("BRPM: " + brpm);
                     brpmValue = brpm;
                     updateUIState(2);
+                    ToneGenerator toneGen = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100);
+                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 300);
                 });
             }
 
@@ -248,6 +275,8 @@ public class MainActivity extends AppCompatActivity {
                     brpmText.setText("BRPM: ❌ Некоректне значення");
                     Toast.makeText(MainActivity.this, "BRPM не визначено. Повторіть вимір.", Toast.LENGTH_LONG).show();
                     repeatBrpmButton.setVisibility(View.VISIBLE);
+                    ToneGenerator toneGen = new ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100);
+                    toneGen.startTone(ToneGenerator.TONE_PROP_BEEP, 300);
                 });
             }
         });
@@ -258,7 +287,15 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "Акселерометр не знайдено", Toast.LENGTH_SHORT).show();
         }
     }
-
+    private void showStressStartDialog() {
+        new androidx.appcompat.app.AlertDialog.Builder(MainActivity.this)
+                .setTitle("Початок аналізу стресу")
+                .setMessage("затисніть кнопку почати запис та скажить коротку фразу." +
+                        "Наприклад: Сьогодні я почуваюся спокійно і розслаблено, нічого мене не турбує. Натисніть ОК, щоб почати.")
+                .setPositiveButton("ОК", (dialog, which) -> startStressAnalyzer())
+                .setNegativeButton("Скасувати", null)
+                .show();
+    }
     private void startStressAnalyzer() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED) {
@@ -338,7 +375,7 @@ public class MainActivity extends AppCompatActivity {
         String url = "https://api.jamendo.com/v3.0/tracks/?" +
                 "client_id=" + clientId +
                 "&format=json" +
-                "&limit=5" +
+                "&limit=10" +
                 "&tags=" + moodTag +
                 "&include=musicinfo" +
                 "&audioformat=mp32";
